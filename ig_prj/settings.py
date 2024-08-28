@@ -25,7 +25,7 @@ SECRET_KEY = 'k1l8gsqp&&glb@%qafi26xb-y4%xjf60g)2!6bspqc+@xjl7me'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['instagram-clone-d.herokuapp.com', '127.0.0.1']
+ALLOWED_HOSTS = ['127.0.0.1']
 
 
 # Application definition
@@ -150,3 +150,20 @@ LOGOUT_REDIRECT_URL = 'sign-in'
 LOGIN_URL = 'sign-in'
 
 CRISPY_TEMPLATE_PACK = 'bootstrap4'
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'django.db.backends': {
+            'level': 'DEBUG',
+            'handlers': ['console'],
+        },
+    },
+}
