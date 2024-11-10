@@ -1,4 +1,4 @@
-from directs.views import inbox, Directs, SendDirect, UserSearch, NewConversation
+from directs.views import inbox, Directs, SendDirect, UserSearch, NewConversation, map_view
 from django.urls import path
 
 urlpatterns = [
@@ -7,4 +7,5 @@ urlpatterns = [
     path('send/', SendDirect, name="send-directs"),
     path('search/', UserSearch, name="search-users"),
     path('new/<username>', NewConversation, name="conversation"),
+    path('map/', map_view, name='map_view'),
 ]
