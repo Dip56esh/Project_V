@@ -16,7 +16,7 @@ import branca
 # from .models import User  # Assuming user data is stored in a model called User
 import time
 from django.utils.html import escape
-
+from django.http import JsonResponse
 
 @login_required
 def inbox(request):
@@ -161,3 +161,29 @@ def map_view(request):
     m = m._repr_html_()  # Convert map to HTML
 
     return render(request, 'directs/map_view.html', {'map': m})
+
+
+@login_required
+def CallView(request, username):
+    user = request.user
+    try:
+        to_user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return redirect('search-users')
+
+    context = {
+        'from_user': user,
+        'to_user': to_user,
+    }
+    return render(request, 'directs/call.html', context)
+
+
+@login_required
+def GenerateToken(request):
+    import random
+    import string
+
+    if request.method == "POST":
+        token = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
+        return JsonResponse({'token': token})
+    return JsonResponse({'error': 'Invalid request method'}, status=400)

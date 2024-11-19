@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'comment',
     'directs',
     'notification',
+    'channels'
 ]
 
 MIDDLEWARE = [
@@ -79,7 +80,15 @@ TEMPLATES = [
     },
 ]
 
+ASGI_APPLICATION = 'ig_prj.asgi.application'
 WSGI_APPLICATION = 'ig_prj.wsgi.application'
+
+# WebSocket settings
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    },
+}
 
 
 # Database
