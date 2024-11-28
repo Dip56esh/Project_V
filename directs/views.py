@@ -141,18 +141,25 @@ def map_view(request):
             distance = geodesic((user_latitude, user_longitude), (lat, lon)).km
 
             # Profile details for popup
-            # profile_image_url = profile.image.url if profile.image.url else '/path/to/default/image.jpg'
-            profile_name = escape(profile.user.username)
+            # profile_image_url = escape(profile.image.url) 
+            profile_name = escape(profile.user.first_name)
+            profile_username=escape(profile.user.username)
             profile_bio = escape(profile.bio or "No bio available")
 
             popup_content = f"""
-                <div style="text-align: center;">
-                   
-                    <p><strong>{profile_name}</strong></p>
-                    <p><em>{profile_bio}</em></p>
+              <div class="side-menu__user-profile" style="display: flex; align-items: center; padding: 10px; background-color: #f9f9f9; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);">
+              
+              <div class="side-menu__user-info" style="flex-grow: 1;">
+                  
+                  <span style="font-weight: bold; color: #333; text-decoration: none;">{profile_name}</span>
+                  <span style="display: block; color: #777; font-size: 14px;">@{profile_username}</span> </br>
+
+                  <span style="font-weight: bold; color: #333; text-decoration: none;">{profile_bio}</span>
+                  </br>
                     <p>Location: {escape(profile.location)}</p>
-                    <p>Distance: {distance:.2f} km</p>
-                </div>
+                  <p>Distance: {distance:.2f} km</p>
+              
+          </div>
             """
             iframe = branca.element.IFrame(html=popup_content, width=250, height=150)
             folium.Marker([lat, lon], popup=folium.Popup(iframe)).add_to(m)
@@ -165,25 +172,7 @@ def map_view(request):
 
 @login_required
 def CallView(request, username):
-    user = request.user
-    try:
-        to_user = User.objects.get(username=username)
-    except User.DoesNotExist:
-        return redirect('search-users')
-
-    context = {
-        'from_user': user,
-        'to_user': to_user,
-    }
-    return render(request, 'directs/call.html', context)
+    
+    return render(request, 'directs/call.html')
 
 
-@login_required
-def GenerateToken(request):
-    import random
-    import string
-
-    if request.method == "POST":
-        token = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
-        return JsonResponse({'token': token})
-    return JsonResponse({'error': 'Invalid request method'}, status=400)

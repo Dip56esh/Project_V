@@ -1,85 +1,281 @@
 {% extends 'base.html' %}
-{% load static %}
 {% block content %}
-
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Call</title>
+    <title>Video Chat</title>
     <style>
-        #video-grid {
+          body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f2f5;
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            background: #f0f0f0;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        .video-container {
+            display: flex;
+            gap: 20px;
+        }
+        .video-wrapper {
+            flex: 1;
+            background: #000;
+            position: relative;
+            aspect-ratio: 16/9;
         }
         video {
-            border: 2px solid #000;
-            margin: 10px;
-            width: 45%;
-            height: auto;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+    
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+    
+        .controls button {
+            padding: 10px 15px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+    
+        .controls button:hover {
+            background: #0056b3;
+        }
+    
+        .status {
+            text-align: center;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #f8d7da;
+            color: #721c24;
+            border-radius: 5px;
+            border: 1px solid #f5c6cb;
         }
     </style>
+    
 </head>
 <body>
-    <div id="video-grid">
-        <video id="local-video" autoplay muted></video>
-        <video id="remote-video" autoplay></video>
+    <div class="container">
+        <div class="status" id="statusMessage">Waiting to connect...</div>
+        <div class="video-container">
+            <div class="video-wrapper">
+                <video id="localVideo" autoplay muted playsinline></video>
+            </div>
+            <div class="video-wrapper">
+                <video id="remoteVideo" autoplay playsinline></video>
+            </div>
+        </div>
+        <div class="controls">
+            <button id="startCallButton">Start Call</button>
+            <button id="toggleVideo">Toggle Video</button>
+            <button id="toggleAudio">Toggle Audio</button>
+        </div>
     </div>
 
     <script>
-        const localVideo = document.getElementById('local-video');
-        const remoteVideo = document.getElementById('remote-video');
-
-        const peerConnectionConfig = {
+        // WebRTC and WebSocket Configuration
+        const configuration = {
             iceServers: [
-                { urls: "stun:stun.l.google.com:19302" }
+                { urls: 'stun:stun.l.google.com:19302' },
+                { 
+                    urls: 'turn:openrelay.metered.ca:80',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                }
             ]
         };
 
+        // DOM Elements
+        const localVideo = document.getElementById('localVideo');
+        const remoteVideo = document.getElementById('remoteVideo');
+        const startCallButton = document.getElementById('startCallButton');
+        const toggleVideoButton = document.getElementById('toggleVideo');
+        const toggleAudioButton = document.getElementById('toggleAudio');
+        const statusMessage = document.getElementById('statusMessage');
+
+        // WebRTC and Stream Variables
+        let localStream;
         let peerConnection;
+        let websocket;
 
-        async function startCall() {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            localVideo.srcObject = stream;
+        // Initialize WebSocket Connection
+        function initWebSocket() {
+            // Use wss:// for secure connections in production
+            const protocol = window.location.protocol === 'http:';
+            websocket = new WebSocket(`${protocol}//${window.location.host}/message/call/`);
 
-            peerConnection = new RTCPeerConnection(peerConnectionConfig);
-
-            stream.getTracks().forEach(track => {
-                peerConnection.addTrack(track, stream);
-            });
-
-            peerConnection.ontrack = (event) => {
-                const [remoteStream] = event.streams;
-                remoteVideo.srcObject = remoteStream;
+            websocket.onopen = () => {
+                updateStatus('WebSocket connected. Ready to start call.');
+                startCallButton.disabled = false;
             };
 
+            websocket.onmessage = async (event) => {
+                const data = JSON.parse(event.data);
+                await handleSignalingData(data);
+            };
+
+            websocket.onerror = (error) => {
+                updateStatus('WebSocket connection error');
+                console.error('WebSocket Error:', error);
+            };
+
+            websocket.onclose = () => {
+                updateStatus('WebSocket disconnected. Reconnecting...');
+                setTimeout(initWebSocket, 3000);
+            };
+        }
+
+        // Initialize Local Media Stream
+        async function initLocalStream() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: true
+                });
+                localVideo.srcObject = localStream;
+                updateStatus('Local media stream initialized');
+            } catch (error) {
+                updateStatus('Error accessing media devices');
+                console.error('Media Devices Error:', error);
+            }
+        }
+
+        // Create WebRTC Peer Connection
+        function createPeerConnection() {
+            peerConnection = new RTCPeerConnection(configuration);
+
+            // Add local stream tracks
+            localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStream);
+            });
+
+            // Handle incoming remote stream
+            peerConnection.ontrack = (event) => {
+                remoteVideo.srcObject = event.streams[0];
+                updateStatus('Remote stream received');
+            };
+
+            // Handle ICE candidates
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate) {
-                    sendSignal({
-                        type: 'new-ice-candidate',
-                        candidate: event.candidate,
-                    });
+                    websocket.send(JSON.stringify({
+                        type: 'ice_candidate',
+                        candidate: event.candidate
+                    }));
                 }
             };
 
+            // Connection state tracking
+            peerConnection.onconnectionstatechange = () => {
+                updateStatus(`Connection state: ${peerConnection.connectionState}`);
+            };
+        }
+
+        // Handle Signaling Data
+        async function handleSignalingData(data) {
+            try {
+                switch(data.type) {
+                    case 'offer':
+                        await handleOffer(data.offer);
+                        break;
+                    case 'answer':
+                        await handleAnswer(data.answer);
+                        break;
+                    case 'ice_candidate':
+                        await handleIceCandidate(data.candidate);
+                        break;
+                }
+            } catch (error) {
+                console.error('Signaling error:', error);
+                updateStatus('Error processing signaling data');
+            }
+        }
+
+        // Create and Send Offer
+        async function createAndSendOffer() {
+            createPeerConnection();
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
-
-            sendSignal({ type: 'video-offer', sdp: offer });
+            websocket.send(JSON.stringify({
+                type: 'offer',
+                offer: offer
+            }));
+            updateStatus('Offer created and sent');
         }
 
-        function sendSignal(message) {
-            // Use WebSocket or API call to send `message` to the server and the other participant.
-            console.log('Signal Sent:', message);
+        // Handle Received Offer
+        async function handleOffer(offer) {
+            if (!peerConnection) createPeerConnection();
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            websocket.send(JSON.stringify({
+                type: 'answer',
+                answer: answer
+            }));
+            updateStatus('Answered incoming call');
         }
 
-        // Call the function to start the call
-        startCall();
+        // Handle Received Answer
+        async function handleAnswer(answer) {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+            updateStatus('Call connection established');
+        }
+
+        // Handle ICE Candidate
+        async function handleIceCandidate(candidate) {
+            try {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (error) {
+                console.error('Error adding ICE candidate:', error);
+            }
+        }
+
+        // Update Status Message
+        function updateStatus(message) {
+            console.log(message);
+            statusMessage.textContent = message;
+        }
+
+        // Event Listeners
+        startCallButton.addEventListener('click', createAndSendOffer);
+
+        toggleVideoButton.addEventListener('click', () => {
+            const videoTrack = localStream.getVideoTracks()[0];
+            videoTrack.enabled = !videoTrack.enabled;
+        });
+
+        toggleAudioButton.addEventListener('click', () => {
+            const audioTrack = localStream.getAudioTracks()[0];
+            audioTrack.enabled = !audioTrack.enabled;
+        });
+
+        // Initialize on Page Load
+        async function init() {
+            await initLocalStream();
+            initWebSocket();
+        }
+
+        init();
     </script>
 </body>
 </html>
-{% endblock content %}
+{%endblock content%}
